@@ -2,52 +2,40 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Goalink Editor - Universal Parser</title>
+    <title>Goalink Editor - PC/Mobile Perfect Parser</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        body { background: #111; color: white; font-family: 'Helvetica Neue', Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; }
+        body { background: #111; color: white; font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; }
         .controls { background: #222; padding: 15px; border-radius: 10px; margin-bottom: 20px; width: 450px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
         textarea { width: 100%; height: 120px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 11px; }
-        .color-picker { display: flex; align-items: center; gap: 10px; font-size: 12px; }
         button { background: #007AFF; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
         
         #capture-area { 
-            width: 432px; height: 540px; 
-            background: #000; overflow: hidden; position: relative;
+            width: 432px; height: 540px; background: #000; overflow: hidden; position: relative;
             display: flex; flex-direction: column; padding: 15px 10px 25px 10px; box-sizing: border-box;
         }
-
         .header { text-align: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px; margin-left: 20px; margin-right: 20px; }
-        .league-title { font-size: 17px; font-weight: 900; color: #ffffff; letter-spacing: 0.05em; margin-bottom: 2px; }
+        .league-title { font-size: 17px; font-weight: 900; color: #ffffff; margin-bottom: 2px; }
         .round-info { font-size: 12px; font-weight: 700; color: #ffffff; opacity: 0.9; }
-
         .matches-list { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
         .match-row { display: flex; align-items: center; justify-content: center; height: 39px; width: 100%; }
         .team-side { flex: 1 0 0; display: flex; align-items: center; overflow: hidden; }
         .team-h { justify-content: flex-end; padding-right: 12px; }
         .team-a { justify-content: flex-start; padding-left: 12px; }
-        .name-inner { font-size: 14px; font-weight: 900; white-space: nowrap; display: inline-block; }
-
-        .center-box { 
-            width: 110px; height: 35px; 
-            display: flex; flex-direction: column; justify-content: center; align-items: center; 
-            border-radius: 4px; flex-shrink: 0; padding: 2px 0;
-        }
-        
-        .c-date-time { font-size: 8px; font-weight: 800; line-height: 1.2; color: #fff; white-space: nowrap; }
+        .name-inner { font-size: 14px; font-weight: 900; white-space: nowrap; }
+        .center-box { width: 110px; height: 35px; display: flex; flex-direction: column; justify-content: center; align-items: center; border-radius: 4px; flex-shrink: 0; }
+        .c-date-time { font-size: 8px; font-weight: 800; color: #fff; }
         .c-venue { font-size: 8.5px; font-weight: 600; color: #fff; opacity: 0.95; margin-top: 2px; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-        .score-display { font-size: 19px; font-weight: 900; display: none; color: #fff; letter-spacing: 1.5px; }
-
+        .score-display { font-size: 19px; font-weight: 900; display: none; color: #fff; }
         .mode-results .c-date-time, .mode-results .c-venue { display: none; }
         .mode-results .score-display { display: block; }
-
         #res img { margin-top: 20px; width: 432px; border: 1px solid #444; }
     </style>
 </head>
 <body class="mode-info">
 
     <div class="controls">
-        <textarea id="it" placeholder="スマホまたはPCの日程をそのまま貼り付け"></textarea>
+        <textarea id="it" placeholder="PC/スマホの日程を貼り付け"></textarea>
         <div style="display:flex; gap:5px;">
             <select id="mode-select" onchange="updateMode()" style="flex:1;">
                 <option value="mode-info">告知モード</option>
@@ -55,10 +43,7 @@
             </select>
             <button onclick="parse()" style="flex:1;">1. 読み込み・解析</button>
         </div>
-        <div class="color-picker">
-            <label>中央の色:</label>
-            <input type="color" id="center-color" value="#7a1200" oninput="syncColor()">
-        </div>
+        <input type="color" id="center-color" value="#7a1200" oninput="syncColor()">
         <button onclick="takePhoto()" style="background:#34c759;">2. 画像出力</button>
     </div>
 
@@ -69,7 +54,6 @@
         </div>
         <div class="matches-list" id="match-container"></div>
     </div>
-
     <div id="res"></div>
 
     <script>
@@ -89,13 +73,9 @@
         };
 
         function toHalfWidth(str) { return str.replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).trim(); }
-        
         function getConvertedName(name) {
-            if (!name) return "";
-            const n = toHalfWidth(name);
-            for (let key in teamDict) {
-                if (n === toHalfWidth(key)) return teamDict[key];
-            }
+            const n = toHalfWidth(name || "");
+            for (let key in teamDict) { if (n === toHalfWidth(key)) return teamDict[key]; }
             return name;
         }
 
@@ -106,46 +86,44 @@
             let currentDate = "";
 
             for (let i = 0; i < lines.length; i++) {
-                // 日付の更新
+                // 日付更新
                 const dateMatch = lines[i].match(/(\d{1,2}月\d{1,2}日\(.\))/);
                 if(dateMatch) currentDate = dateMatch[0];
 
-                // 時間（HH:mm形式）を見つけたら、その周囲からデータを引っこ抜く
+                // 時間（00:00）をフックにする
                 const timeMatch = lines[i].match(/^(\d{1,2}:\d{2})$/);
                 if(timeMatch) {
                     const time = timeMatch[1];
-                    let home, away, venue;
+                    let h, a, v;
 
-                    // パターンA: スマホ形式（直前にホーム、直後にアウェイ、その次に会場）
-                    if (lines[i-1] !== "VS" && lines[i-1] !== "みどころ" && lines[i+1] && lines[i+2]) {
-                        // みどころを飛ばす判定
+                    // PC版の判定ロジック強化: 直後が会場、その次がホーム、さらに先に「VS」
+                    if (lines[i+2] && (lines[i+2].toUpperCase() === "VS" || lines[i+3] === "ＶＳ")) {
+                        v = lines[i+1]; // 時間の直後はスタジアム
+                        h = lines[i+2] === "ＶＳ" || lines[i+2].toUpperCase() === "VS" ? lines[i+1] : lines[i+2]; // チーム名
+                        // VSの次を探す
+                        for(let j=i+1; j<i+6; j++){
+                            if(lines[j] && (lines[j].toUpperCase()==="VS" || lines[j]==="ＶＳ")){
+                                h = lines[j-1];
+                                a = lines[j+1];
+                                break;
+                            }
+                        }
+                    } else {
+                        // スマホ版の判定ロジック
                         let hIdx = (lines[i-1] === "みどころ") ? i-2 : i-1;
                         let aIdx = (lines[i+1] === "みどころ") ? i+2 : i+1;
                         let vIdx = (lines[i+1] === "みどころ") ? i+3 : i+2;
                         
-                        // PC版の特殊な「VS」行がある場合の回避
-                        if (lines[aIdx] !== "ＶＳ") {
-                            home = lines[hIdx];
-                            away = lines[aIdx];
-                            venue = lines[vIdx];
+                        // ゴミデータ排除（EAST/WESTなどはチーム名にしない）
+                        if (!["EAST", "WEST"].includes(lines[hIdx])) {
+                            h = lines[hIdx];
+                            a = lines[aIdx];
+                            v = lines[vIdx];
                         }
                     }
 
-                    // パターンB: PC形式（直前に会場、直後にホーム、その次にVS、その次にアウェイ）
-                    if (lines[i+2] === "ＶＳ") {
-                        venue = lines[i-1];
-                        home = lines[i+1];
-                        away = lines[i+3];
-                    }
-
-                    if(home && away && venue) {
-                        tempMatchData.push({
-                            date: currentDate,
-                            time: time,
-                            home: getConvertedName(home),
-                            away: getConvertedName(away),
-                            venue: venue
-                        });
+                    if(h && a && v && h !== "EAST" && h !== "WEST") {
+                        tempMatchData.push({ date: currentDate, time: time, home: getConvertedName(h), away: getConvertedName(a), venue: v });
                     }
                 }
             }
@@ -156,7 +134,7 @@
         function render() {
             const container = document.getElementById('match-container');
             const color = document.getElementById('center-color').value;
-            container.innerHTML = matchData.map((m, i) => `
+            container.innerHTML = matchData.slice(0, 10).map(m => `
                 <div class="match-row">
                     <div class="team-side team-h"><div class="name-inner" contenteditable="true">${m.home}</div></div>
                     <div class="center-box" style="background: ${color}">
@@ -171,19 +149,16 @@
         }
 
         function autoScaleTeams() {
-            const rows = document.querySelectorAll('.match-row');
-            rows.forEach(row => {
+            document.querySelectorAll('.match-row').forEach(row => {
                 const sides = row.querySelectorAll('.team-side');
                 const innerH = row.querySelector('.team-h .name-inner');
                 const innerA = row.querySelector('.team-a .name-inner');
                 const maxWidth = sides[0].offsetWidth - 12;
-                innerH.style.transform = 'scale(1)';
-                innerA.style.transform = 'scale(1)';
+                innerH.style.transform = innerA.style.transform = 'scale(1)';
                 const currentMax = Math.max(innerH.scrollWidth, innerA.scrollWidth);
                 if (currentMax > maxWidth) {
                     const ratio = maxWidth / currentMax;
-                    innerH.style.transform = `scale(${ratio})`;
-                    innerA.style.transform = `scale(${ratio})`;
+                    innerH.style.transform = innerA.style.transform = `scale(${ratio})`;
                     innerH.style.transformOrigin = 'right center';
                     innerA.style.transformOrigin = 'left center';
                 }
@@ -194,11 +169,7 @@
             const color = document.getElementById('center-color').value;
             document.querySelectorAll('.center-box').forEach(el => el.style.background = color);
         }
-
-        function updateMode() {
-            document.getElementById('capture-area').className = document.getElementById('mode-select').value;
-        }
-
+        function updateMode() { document.getElementById('capture-area').className = document.getElementById('mode-select').value; }
         function takePhoto() {
             html2canvas(document.getElementById('capture-area'), { scale: 4, backgroundColor: "#000" }).then(c => {
                 const res = document.getElementById('res');
