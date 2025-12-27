@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Goalink Editor - Venue Optimized</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { background: #111; color: white; font-family: 'Helvetica Neue', Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; }
+        .controls { background: #222; padding: 15px; border-radius: 10px; margin-bottom: 20px; width: 450px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
+        textarea { width: 100%; height: 80px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 11px; }
+        .color-picker { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+        button { background: #007AFF; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        
+        #capture-area { 
+            width: 432px; height: 540px; 
+            background: #000; overflow: hidden; position: relative;
+            display: flex; flex-direction: column; padding: 15px 10px 25px 10px; box-sizing: border-box;
+        }
+
+        .header { text-align: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px; margin-left: 20px; margin-right: 20px; }
+        .league-title { font-size: 17px; font-weight: 900; color: #ffffff; letter-spacing: 0.05em; margin-bottom: 2px; }
+        .round-info { font-size: 12px; font-weight: 700; color: #ffffff; opacity: 0.9; }
+
+        .matches-list { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        .match-row { display: flex; align-items: center; justify-content: center; height: 39px; width: 100%; }
+        .team-side { flex: 1 0 0; display: flex; align-items: center; overflow: hidden; }
+        .team-h { justify-content: flex-end; padding-right: 12px; }
+        .team-a { justify-content: flex-start; padding-left: 12px; }
+        .name-inner { font-size: 14px; font-weight: 900; white-space: nowrap; display: inline-block; }
+
+        .center-box { 
+            width: 108px;
+            height: 35px; /* 高さを少し拡大 */
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            border-radius: 4px; flex-shrink: 0;
+            padding: 2px 0; /* 上下の詰まりを解消 */
+        }
+        
+        /* 日時：少しだけシャープに */
+        .c-date-time { font-size: 8px; font-weight: 800; line-height: 1.2; color: #fff; white-space: nowrap; }
+        
+        /* 会場名：サイズを上げ、位置を最適化 */
+        .c-venue { 
+            font-size: 8.5px; /* 7pxから拡大 */
+            font-weight: 600; 
+            color: #fff; 
+            opacity: 0.95; 
+            margin-top: 2px;
+            max-width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .score-display { font-size: 19px; font-weight: 900; display: none; color: #fff; letter-spacing: 1.5px; }
+
+        .mode-results .c-date-time, .mode-results .c-venue { display: none; }
+        .mode-results .score-display { display: block; }
+
+        #res img { margin-top: 20px; width: 432px; border: 1px solid #444; }
+    </style>
+</head>
+<body class="mode-info">
+
+    <div class="controls">
+        <textarea id="it" placeholder="日程テキストを貼り付け"></textarea>
+        <div style="display:flex; gap:5px;">
+            <select id="mode-select" onchange="updateMode()" style="flex:1;">
+                <option value="mode-info">告知モード</option>
+                <option value="mode-results">結果モード</option>
+            </select>
+            <button onclick="parse()" style="flex:1;">1. 読み込み</button>
+        </div>
+        <div class="color-picker">
+            <label>中央の色:</label>
+            <input type="color" id="center-color" value="#7a1200" oninput="syncColor()">
+        </div>
+        <button onclick="takePhoto()" style="background:#34c759;">2. 画像出力</button>
+    </div>
+
+    <div id="capture-area" class="mode-info">
+        <div class="header">
+            <div class="league-title" id="out-league" contenteditable="true">明治安田Ｊ１リーグ</div>
+            <div class="round-info" id="out-round" contenteditable="true">第1節 対戦カード</div>
+        </div>
+        <div class="matches-list" id="match-container"></div>
+    </div>
+
+    <div id="res"></div>
+
+    <script>
+        const teamDict = {
+            "鹿島": "鹿島アントラーズ", "水戸": "水戸ホーリーホック", "浦和": "浦和レッズ", "千葉": "ジェフユナイテッド千葉", "柏": "柏レイソル",
+            "FC東京": "FC東京", "東京V": "東京ヴェルディ", "町田": "FC町田ゼルビア", "川崎F": "川崎フロンターレ", "横浜FM": "横浜F・マリノス",
+            "清水": "清水エスパルス", "名古屋": "名古屋グランパス", "京都": "京都サンガF.C.", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪",
+            "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", "広島": "サンフレッチェ広島", "福岡": "アビスパ福岡", "長崎": "V・ファーレン長崎",
+            "八戸": "ヴァンラーレ八戸", "秋田": "ブラウブリッツ秋田", "仙台": "ベガルタ仙台", "山形": "モンテディオ山形", "栃木SC": "栃木SC",
+            "栃木C": "栃木シティ", "群馬": "ザスパ群馬", "横浜FC": "横浜FC", "湘南": "湘南ベルマーレ", "相模原": "SC相模原",
+            "札幌": "北海道コンサドーレ札幌", "福島": "福島ユナイテッドFC", "いわき": "いわきFC", "大宮": "RB大宮アルディージャ", "甲府": "ヴァンフォーレ甲府",
+            "松本": "松本山雅FC", "長野": "AC長野パルセイロ", "磐田": "ジュビロ磐田", "藤枝": "藤枝MYFC", "岐阜": "FC岐阜",
+            "新潟": "アルビレックス新潟", "富山": "カターレ富山", "金沢": "ツエーゲン金沢", "FC大阪": "FC大阪", "奈良": "奈良クラブ",
+            "讃岐": "カマタマーレ讃岐", "徳島": "徳島ヴォルティス", "愛媛": "愛媛FC", "今治": "FC今治", "高知": "高知ユナイテッドSC",
+            "滋賀": "レイラック滋賀FC", "鳥取": "ガイナーレ鳥取", "山口": "レノファ山口FC", "北九州": "ギラヴァンツ北九州", "鳥栖": "サガン鳥栖",
+            "熊本": "ロアッソ熊本", "大分": "大分トリニータ", "宮崎": "テゲバジャーロ宮崎", "鹿児島": "鹿児島ユナイテッドFC", "琉球": "FC琉球"
+        };
+
+        function toHalfWidth(str) { return str.replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)); }
+        function getConvertedName(name) {
+            if (!name) return "";
+            const halfName = toHalfWidth(name.trim());
+            for (let key in teamDict) { if (halfName === toHalfWidth(key)) return teamDict[key]; }
+            return name;
+        }
+
+        let matchData = [];
+        function parse() {
+            const raw = document.getElementById('it').value;
+            const lines = raw.split('\n').map(l => l.trim()).filter(l => l !== "");
+            matchData = [];
+            let currentDate = "";
+
+            for (let i = 0; i < lines.length; i++) {
+                const dateMatch = lines[i].match(/(\d{1,2}月\d{1,2}日(?:\s*\(.\))?)/);
+                if(dateMatch) currentDate = dateMatch[0];
+
+                if (lines[i].match(/^\d{1,2}:\d{2}$/)) {
+                    let h = lines[i-1] === "みどころ" ? lines[i-2] : lines[i-1];
+                    let a = lines[i+1] === "みどころ" ? lines[i+2] : lines[i+1];
+                    let v = lines[i+2] === "みどころ" ? lines[i+3] : lines[i+2];
+                    matchData.push({ date: currentDate, time: lines[i], home: getConvertedName(h), away: getConvertedName(a), venue: v });
+                }
+            }
+            render();
+        }
+
+        function render() {
+            const container = document.getElementById('match-container');
+            const color = document.getElementById('center-color').value;
+            container.innerHTML = matchData.map((m, i) => `
+                <div class="match-row">
+                    <div class="team-side team-h"><div class="name-inner" contenteditable="true">${m.home}</div></div>
+                    <div class="center-box" style="background: ${color}">
+                        <div class="c-date-time">${m.date} ${m.time}</div>
+                        <div class="c-venue" contenteditable="true">${m.venue}</div>
+                        <div class="score-display" contenteditable="true">0 - 0</div>
+                    </div>
+                    <div class="team-side team-a"><div class="name-inner" contenteditable="true">${m.away}</div></div>
+                </div>
+            `).join('');
+            setTimeout(autoScaleTeams, 50);
+        }
+
+        function autoScaleTeams() {
+            const rows = document.querySelectorAll('.match-row');
+            rows.forEach(row => {
+                const sides = row.querySelectorAll('.team-side');
+                const innerH = row.querySelector('.team-h .name-inner');
+                const innerA = row.querySelector('.team-a .name-inner');
+                const maxWidth = sides[0].offsetWidth - 12;
+                innerH.style.transform = 'scale(1)';
+                innerA.style.transform = 'scale(1)';
+                const currentMax = Math.max(innerH.scrollWidth, innerA.scrollWidth);
+                if (currentMax > maxWidth) {
+                    const ratio = maxWidth / currentMax;
+                    innerH.style.transform = `scale(${ratio})`;
+                    innerA.style.transform = `scale(${ratio})`;
+                    innerH.style.transformOrigin = 'right center';
+                    innerA.style.transformOrigin = 'left center';
+                }
+            });
+        }
+
+        function syncColor() {
+            const color = document.getElementById('center-color').value;
+            document.querySelectorAll('.center-box').forEach(el => el.style.background = color);
+        }
+
+        function updateMode() {
+            document.getElementById('capture-area').className = document.getElementById('mode-select').value;
+        }
+
+        function takePhoto() {
+            html2canvas(document.getElementById('capture-area'), { scale: 4, backgroundColor: "#000" }).then(c => {
+                const res = document.getElementById('res');
+                res.innerHTML = '';
+                res.appendChild(new Image()).src = c.toDataURL();
+            });
+        }
+    </script>
+</body>
+</html>
