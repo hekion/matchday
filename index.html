@@ -2,12 +2,12 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Goalink Editor - Venue Optimized</title>
+    <title>Goalink Editor - Universal Parser</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { background: #111; color: white; font-family: 'Helvetica Neue', Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; }
         .controls { background: #222; padding: 15px; border-radius: 10px; margin-bottom: 20px; width: 450px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
-        textarea { width: 100%; height: 80px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 11px; }
+        textarea { width: 100%; height: 120px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 11px; }
         .color-picker { display: flex; align-items: center; gap: 10px; font-size: 12px; }
         button { background: #007AFF; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
         
@@ -22,7 +22,6 @@
         .round-info { font-size: 12px; font-weight: 700; color: #ffffff; opacity: 0.9; }
 
         .matches-list { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
-        
         .match-row { display: flex; align-items: center; justify-content: center; height: 39px; width: 100%; }
         .team-side { flex: 1 0 0; display: flex; align-items: center; overflow: hidden; }
         .team-h { justify-content: flex-end; padding-right: 12px; }
@@ -30,29 +29,13 @@
         .name-inner { font-size: 14px; font-weight: 900; white-space: nowrap; display: inline-block; }
 
         .center-box { 
-            width: 108px;
-            height: 35px; /* 高さを少し拡大 */
+            width: 110px; height: 35px; 
             display: flex; flex-direction: column; justify-content: center; align-items: center; 
-            border-radius: 4px; flex-shrink: 0;
-            padding: 2px 0; /* 上下の詰まりを解消 */
+            border-radius: 4px; flex-shrink: 0; padding: 2px 0;
         }
         
-        /* 日時：少しだけシャープに */
         .c-date-time { font-size: 8px; font-weight: 800; line-height: 1.2; color: #fff; white-space: nowrap; }
-        
-        /* 会場名：サイズを上げ、位置を最適化 */
-        .c-venue { 
-            font-size: 8.5px; /* 7pxから拡大 */
-            font-weight: 600; 
-            color: #fff; 
-            opacity: 0.95; 
-            margin-top: 2px;
-            max-width: 100%;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-        }
-
+        .c-venue { font-size: 8.5px; font-weight: 600; color: #fff; opacity: 0.95; margin-top: 2px; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
         .score-display { font-size: 19px; font-weight: 900; display: none; color: #fff; letter-spacing: 1.5px; }
 
         .mode-results .c-date-time, .mode-results .c-venue { display: none; }
@@ -64,13 +47,13 @@
 <body class="mode-info">
 
     <div class="controls">
-        <textarea id="it" placeholder="日程テキストを貼り付け"></textarea>
+        <textarea id="it" placeholder="スマホまたはPCの日程をそのまま貼り付け"></textarea>
         <div style="display:flex; gap:5px;">
             <select id="mode-select" onchange="updateMode()" style="flex:1;">
                 <option value="mode-info">告知モード</option>
                 <option value="mode-results">結果モード</option>
             </select>
-            <button onclick="parse()" style="flex:1;">1. 読み込み</button>
+            <button onclick="parse()" style="flex:1;">1. 読み込み・解析</button>
         </div>
         <div class="color-picker">
             <label>中央の色:</label>
@@ -81,8 +64,8 @@
 
     <div id="capture-area" class="mode-info">
         <div class="header">
-            <div class="league-title" id="out-league" contenteditable="true">明治安田Ｊ１リーグ</div>
-            <div class="round-info" id="out-round" contenteditable="true">第1節 対戦カード</div>
+            <div class="league-title" id="out-league" contenteditable="true">明治安田Ｊ１百年構想リーグ</div>
+            <div class="round-info" id="out-round" contenteditable="true">ラウンド 第1節</div>
         </div>
         <div class="matches-list" id="match-container"></div>
     </div>
@@ -91,9 +74,9 @@
 
     <script>
         const teamDict = {
-            "鹿島": "鹿島アントラーズ", "水戸": "水戸ホーリーホック", "浦和": "浦和レッズ", "千葉": "ジェフユナイテッド千葉", "柏": "柏レイソル",
+            "鹿島": "鹿島アントラーズ", "水戸": "水戸ホーリーホック", "浦和": "浦和レッズ", "千葉": "ジェフユナイテッド千葉", "ジェフ千葉": "ジェフユナイテッド千葉", "柏": "柏レイソル",
             "FC東京": "FC東京", "東京V": "東京ヴェルディ", "町田": "FC町田ゼルビア", "川崎F": "川崎フロンターレ", "横浜FM": "横浜F・マリノス",
-            "清水": "清水エスパルス", "名古屋": "名古屋グランパス", "京都": "京都サンガF.C.", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪",
+            "清水": "清水エスパルス", "名古屋": "名古屋グランパス", "京都": "京都サンガF.C.", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", "Ｃ大阪": "セレッソ大阪", "Ｇ大阪": "ガンバ大阪",
             "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", "広島": "サンフレッチェ広島", "福岡": "アビスパ福岡", "長崎": "V・ファーレン長崎",
             "八戸": "ヴァンラーレ八戸", "秋田": "ブラウブリッツ秋田", "仙台": "ベガルタ仙台", "山形": "モンテディオ山形", "栃木SC": "栃木SC",
             "栃木C": "栃木シティ", "群馬": "ザスパ群馬", "横浜FC": "横浜FC", "湘南": "湘南ベルマーレ", "相模原": "SC相模原",
@@ -105,32 +88,68 @@
             "熊本": "ロアッソ熊本", "大分": "大分トリニータ", "宮崎": "テゲバジャーロ宮崎", "鹿児島": "鹿児島ユナイテッドFC", "琉球": "FC琉球"
         };
 
-        function toHalfWidth(str) { return str.replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)); }
+        function toHalfWidth(str) { return str.replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).trim(); }
+        
         function getConvertedName(name) {
             if (!name) return "";
-            const halfName = toHalfWidth(name.trim());
-            for (let key in teamDict) { if (halfName === toHalfWidth(key)) return teamDict[key]; }
+            const n = toHalfWidth(name);
+            for (let key in teamDict) {
+                if (n === toHalfWidth(key)) return teamDict[key];
+            }
             return name;
         }
 
-        let matchData = [];
         function parse() {
             const raw = document.getElementById('it').value;
             const lines = raw.split('\n').map(l => l.trim()).filter(l => l !== "");
-            matchData = [];
+            let tempMatchData = [];
             let currentDate = "";
 
             for (let i = 0; i < lines.length; i++) {
-                const dateMatch = lines[i].match(/(\d{1,2}月\d{1,2}日(?:\s*\(.\))?)/);
+                // 日付の更新
+                const dateMatch = lines[i].match(/(\d{1,2}月\d{1,2}日\(.\))/);
                 if(dateMatch) currentDate = dateMatch[0];
 
-                if (lines[i].match(/^\d{1,2}:\d{2}$/)) {
-                    let h = lines[i-1] === "みどころ" ? lines[i-2] : lines[i-1];
-                    let a = lines[i+1] === "みどころ" ? lines[i+2] : lines[i+1];
-                    let v = lines[i+2] === "みどころ" ? lines[i+3] : lines[i+2];
-                    matchData.push({ date: currentDate, time: lines[i], home: getConvertedName(h), away: getConvertedName(a), venue: v });
+                // 時間（HH:mm形式）を見つけたら、その周囲からデータを引っこ抜く
+                const timeMatch = lines[i].match(/^(\d{1,2}:\d{2})$/);
+                if(timeMatch) {
+                    const time = timeMatch[1];
+                    let home, away, venue;
+
+                    // パターンA: スマホ形式（直前にホーム、直後にアウェイ、その次に会場）
+                    if (lines[i-1] !== "VS" && lines[i-1] !== "みどころ" && lines[i+1] && lines[i+2]) {
+                        // みどころを飛ばす判定
+                        let hIdx = (lines[i-1] === "みどころ") ? i-2 : i-1;
+                        let aIdx = (lines[i+1] === "みどころ") ? i+2 : i+1;
+                        let vIdx = (lines[i+1] === "みどころ") ? i+3 : i+2;
+                        
+                        // PC版の特殊な「VS」行がある場合の回避
+                        if (lines[aIdx] !== "ＶＳ") {
+                            home = lines[hIdx];
+                            away = lines[aIdx];
+                            venue = lines[vIdx];
+                        }
+                    }
+
+                    // パターンB: PC形式（直前に会場、直後にホーム、その次にVS、その次にアウェイ）
+                    if (lines[i+2] === "ＶＳ") {
+                        venue = lines[i-1];
+                        home = lines[i+1];
+                        away = lines[i+3];
+                    }
+
+                    if(home && away && venue) {
+                        tempMatchData.push({
+                            date: currentDate,
+                            time: time,
+                            home: getConvertedName(home),
+                            away: getConvertedName(away),
+                            venue: venue
+                        });
+                    }
                 }
             }
+            matchData = tempMatchData;
             render();
         }
 
