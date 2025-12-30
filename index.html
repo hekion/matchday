@@ -2,18 +2,36 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Goalink Matchday Editor</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        body { background: #111; color: white; font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; }
-        .controls { background: #222; padding: 15px; border-radius: 10px; margin-bottom: 20px; width: 450px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
-        textarea { width: 100%; height: 120px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 11px; }
-        button { background: #007AFF; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        body { background: #111; color: white; font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; margin: 0; }
         
+        /* コントロールパネルをスマホ幅にフィット */
+        .controls { 
+            background: #222; padding: 15px; border-radius: 10px; margin-bottom: 20px; 
+            width: 100%; max-width: 450px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; 
+        }
+        textarea { width: 100%; height: 120px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 4px; padding: 10px; font-size: 14px; box-sizing: border-box; }
+        button { background: #007AFF; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        
+        /* プレビューを画面内に収めるためのコンテナ */
+        .preview-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            overflow-x: auto;
+            padding-bottom: 20px;
+        }
+
+        /* キャプチャエリア（サイズ固定） */
         #capture-area { 
             width: 432px; height: 540px; background: #000; overflow: hidden; position: relative;
             display: flex; flex-direction: column; padding: 15px 10px 25px 10px; box-sizing: border-box;
+            flex-shrink: 0;
         }
+
         .header { text-align: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px; margin-left: 20px; margin-right: 20px; }
         .league-title { font-size: 17px; font-weight: 900; color: #ffffff; margin-bottom: 2px; }
         .round-info { font-size: 12px; font-weight: 700; color: #ffffff; opacity: 0.9; }
@@ -29,7 +47,8 @@
         .score-display { font-size: 19px; font-weight: 900; display: none; color: #fff; }
         .mode-results .c-date-time, .mode-results .c-venue { display: none; }
         .mode-results .score-display { display: block; }
-        #res img { margin-top: 20px; width: 432px; border: 1px solid #444; }
+        
+        #res img { margin-top: 20px; width: 100%; max-width: 432px; border: 1px solid #444; }
     </style>
 </head>
 <body class="mode-info">
@@ -37,26 +56,30 @@
     <div class="controls">
         <textarea id="it" placeholder="PC/スマホの日程を貼り付け"></textarea>
         <div style="display:flex; gap:5px;">
-            <select id="mode-select" onchange="updateMode()" style="flex:1;">
+            <select id="mode-select" onchange="updateMode()" style="flex:1; background:#333; color:white; border-radius:8px; border:1px solid #444; padding:5px;">
                 <option value="mode-info">告知モード</option>
                 <option value="mode-results">結果モード</option>
             </select>
             <button onclick="parse()" style="flex:1;">1. 読み込み・解析</button>
         </div>
-        <input type="color" id="center-color" value="#7a1200" oninput="syncColor()">
+        <input type="color" id="center-color" value="#7a1200" oninput="syncColor()" style="width:100%; height:40px; border:none; background:transparent; cursor:pointer;">
         <button onclick="takePhoto()" style="background:#34c759;">2. 画像出力</button>
     </div>
 
-    <div id="capture-area" class="mode-info">
-        <div class="header">
-            <div class="league-title" id="out-league" contenteditable="true">明治安田Ｊ１百年構想リーグ</div>
-            <div class="round-info" id="out-round" contenteditable="true">ラウンド 第1節</div>
+    <div class="preview-container">
+        <div id="capture-area" class="mode-info">
+            <div class="header">
+                <div class="league-title" id="out-league" contenteditable="true">明治安田Ｊ１百年構想リーグ</div>
+                <div class="round-info" id="out-round" contenteditable="true">ラウンド 第1節</div>
+            </div>
+            <div class="matches-list" id="match-container"></div>
         </div>
-        <div class="matches-list" id="match-container"></div>
     </div>
+    
     <div id="res"></div>
 
     <script>
+        let matchData = [];
         const teamDict = {
             "鹿島": "鹿島アントラーズ", "水戸": "水戸ホーリーホック", "浦和": "浦和レッズ", "千葉": "ジェフユナイテッド千葉", "ジェフ千葉": "ジェフユナイテッド千葉", "柏": "柏レイソル",
             "FC東京": "FC東京", "東京V": "東京ヴェルディ", "町田": "FC町田ゼルビア", "川崎F": "川崎フロンターレ", "横浜FM": "横浜F・マリノス",
@@ -86,21 +109,16 @@
             let currentDate = "";
 
             for (let i = 0; i < lines.length; i++) {
-                // 日付更新
                 const dateMatch = lines[i].match(/(\d{1,2}月\d{1,2}日\(.\))/);
                 if(dateMatch) currentDate = dateMatch[0];
 
-                // 時間（00:00）をフックにする
                 const timeMatch = lines[i].match(/^(\d{1,2}:\d{2})$/);
                 if(timeMatch) {
                     const time = timeMatch[1];
                     let h, a, v;
 
-                    // PC版の判定ロジック強化: 直後が会場、その次がホーム、さらに先に「VS」
                     if (lines[i+2] && (lines[i+2].toUpperCase() === "VS" || lines[i+3] === "ＶＳ")) {
-                        v = lines[i+1]; // 時間の直後はスタジアム
-                        h = lines[i+2] === "ＶＳ" || lines[i+2].toUpperCase() === "VS" ? lines[i+1] : lines[i+2]; // チーム名
-                        // VSの次を探す
+                        v = lines[i+1];
                         for(let j=i+1; j<i+6; j++){
                             if(lines[j] && (lines[j].toUpperCase()==="VS" || lines[j]==="ＶＳ")){
                                 h = lines[j-1];
@@ -109,12 +127,9 @@
                             }
                         }
                     } else {
-                        // スマホ版の判定ロジック
                         let hIdx = (lines[i-1] === "みどころ") ? i-2 : i-1;
                         let aIdx = (lines[i+1] === "みどころ") ? i+2 : i+1;
                         let vIdx = (lines[i+1] === "みどころ") ? i+3 : i+2;
-                        
-                        // ゴミデータ排除（EAST/WESTなどはチーム名にしない）
                         if (!["EAST", "WEST"].includes(lines[hIdx])) {
                             h = lines[hIdx];
                             a = lines[aIdx];
@@ -174,7 +189,9 @@
             html2canvas(document.getElementById('capture-area'), { scale: 4, backgroundColor: "#000" }).then(c => {
                 const res = document.getElementById('res');
                 res.innerHTML = '';
-                res.appendChild(new Image()).src = c.toDataURL();
+                const img = new Image();
+                img.src = c.toDataURL();
+                res.appendChild(img);
             });
         }
     </script>
